@@ -43,6 +43,8 @@ class EndOfRouteViewController: UIViewController {
 
     // MARK: Properties
 
+    var imagePlaceholderView: UIView!
+
     lazy var placeholder: String = "END_OF_ROUTE_TITLE".localizedString(
         value: "How can we improve?",
         comment: "Comment Placeholder Text"
@@ -68,7 +70,14 @@ class EndOfRouteViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        clearInterface()
+
+        // Clear default subviews if added from Storyboard initially
+        view.subviews.forEach { $0.removeFromSuperview() }
+
+        // Setup the main content stack view
+        setupContentStackView()
+
+        clearInterface() // Should be called after setup if it affects outlets
         stars.didChangeRating = { [weak self] new in self?.rating = new }
         setPlaceholderText()
         styleCommentView()
@@ -81,9 +90,8 @@ class EndOfRouteViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-
-        preferredContentSize.height = height(for: .normal)
         updateInterface()
+        commentView.text = placeholder
     }
 
     override func viewDidLayoutSubviews() {
@@ -119,7 +127,6 @@ class EndOfRouteViewController: UIViewController {
         showCommentView.isActive = true
         hideCommentView.isActive = false
         ratingCommentsSpacing.constant = ConstraintSpacing.closer.rawValue
-        preferredContentSize.height = height(for: .commentShowing)
 
         let animate = {
             self.view.layoutIfNeeded()
@@ -137,7 +144,6 @@ class EndOfRouteViewController: UIViewController {
         showCommentView.isActive = false
         hideCommentView.isActive = true
         ratingCommentsSpacing.constant = ConstraintSpacing.further.rawValue
-        preferredContentSize.height = height(for: .normal)
 
         let animate = {
             self.view.layoutIfNeeded()
@@ -148,11 +154,6 @@ class EndOfRouteViewController: UIViewController {
         let completion: (Bool) -> Void = { _ in self.commentViewContainer.isHidden = true }
         let noAnimation = { animate(); completion(true) }
         animated ? UIView.animate(withDuration: 0.3, animations: animate, completion: nil) : noAnimation()
-    }
-
-    private func height(for height: ContainerHeight) -> CGFloat {
-        let bottomMargin = view.safeAreaInsets.bottom
-        return height.rawValue + bottomMargin
     }
 
     private func updateInterface() {
@@ -176,6 +177,131 @@ class EndOfRouteViewController: UIViewController {
 
     private func setPlaceholderText() {
         commentView.text = placeholder
+    }
+
+    private func setupContentStackView() {
+        // Créer un container principal avec padding
+        let containerView = UIView()
+        containerView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(containerView)
+        
+        // Contraintes pour le container
+        NSLayoutConstraint.activate([
+            containerView.topAnchor.constraint(equalTo: view.topAnchor),
+            containerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            containerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            containerView.bottomAnchor.constraint(lessThanOrEqualTo: view.bottomAnchor)
+        ])
+
+        // Stack view principal
+        let mainStack = UIStackView()
+        mainStack.translatesAutoresizingMaskIntoConstraints = false
+        mainStack.axis = .vertical
+        mainStack.spacing = 24
+        mainStack.alignment = .center
+        containerView.addSubview(mainStack)
+
+        // Contraintes pour le stack principal avec padding horizontal
+        NSLayoutConstraint.activate([
+            mainStack.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 24),
+            mainStack.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 24),
+            mainStack.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -24)
+        ])
+
+        guard let labelContainer = self.labelContainer,
+              let stars = self.stars,
+              let commentViewContainer = self.commentViewContainer,
+              let endNavigationButton = self.endNavigationButton else {
+            return
+        }
+
+        // Configurer le titre
+        labelContainer.translatesAutoresizingMaskIntoConstraints = false
+        staticYouHaveArrived.font = .systemFont(ofSize: 28, weight: .bold)
+        staticYouHaveArrived.textAlignment = .center
+        
+        // Configurer les étoiles
+        stars.translatesAutoresizingMaskIntoConstraints = false
+        
+        // Créer un conteneur pour les étoiles pour les centrer
+        let starsContainer = UIView()
+        starsContainer.translatesAutoresizingMaskIntoConstraints = false
+        starsContainer.addSubview(stars)
+        
+        // Centrer les étoiles dans leur conteneur
+        NSLayoutConstraint.activate([
+            stars.centerXAnchor.constraint(equalTo: starsContainer.centerXAnchor),
+            stars.centerYAnchor.constraint(equalTo: starsContainer.centerYAnchor),
+            stars.topAnchor.constraint(equalTo: starsContainer.topAnchor),
+            stars.bottomAnchor.constraint(equalTo: starsContainer.bottomAnchor)
+        ])
+        
+        // Configurer la zone d'image
+        setupImagePlaceholderView()
+        
+        // Configurer le bouton
+        endNavigationButton.translatesAutoresizingMaskIntoConstraints = false
+        
+        // Ajouter les éléments au stack
+        mainStack.addArrangedSubview(labelContainer)
+        mainStack.addArrangedSubview(starsContainer)
+        mainStack.addArrangedSubview(imagePlaceholderView)
+        mainStack.addArrangedSubview(endNavigationButton)
+        
+        // Configurer les contraintes de largeur
+        [labelContainer, starsContainer, imagePlaceholderView, endNavigationButton].forEach { view in
+            view.widthAnchor.constraint(equalTo: mainStack.widthAnchor).isActive = true
+        }
+        
+        // Ajouter un spacer en bas
+        let spacerView = UIView()
+        spacerView.translatesAutoresizingMaskIntoConstraints = false
+        mainStack.addArrangedSubview(spacerView)
+        
+        // Contrainte de hauteur minimale pour le spacer
+        spacerView.heightAnchor.constraint(greaterThanOrEqualToConstant: 20).isActive = true
+        
+        // Configurer les priorités
+        spacerView.setContentHuggingPriority(.defaultLow, for: .vertical)
+        spacerView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        
+        // S'assurer que le stack principal reste en haut
+        mainStack.setContentHuggingPriority(.required, for: .vertical)
+        mainStack.setContentCompressionResistancePriority(.required, for: .vertical)
+    }
+
+    private func setupImagePlaceholderView() {
+        imagePlaceholderView = UIView()
+        imagePlaceholderView.translatesAutoresizingMaskIntoConstraints = false
+        imagePlaceholderView.backgroundColor = .systemGray5
+        imagePlaceholderView.layer.cornerRadius = 8
+        
+        // Définir une hauteur fixe pour la zone d'image
+        imagePlaceholderView.heightAnchor.constraint(equalToConstant: 120).isActive = true
+    }
+
+    private func setupSpacerView(below topView: UIView) { // Pass the view above the spacer
+        let spacerView = UIView()
+        spacerView.translatesAutoresizingMaskIntoConstraints = false
+        spacerView.backgroundColor = .clear // Spacer is invisible
+        view.addSubview(spacerView)
+
+        // Constraints for the spacer view
+        let topConstraint = spacerView.topAnchor.constraint(equalTo: topView.bottomAnchor) // Below the passed topView (contentStackView)
+        let bottomConstraint = spacerView.bottomAnchor.constraint(equalTo: view.bottomAnchor) // Pinned to the container bottom
+
+        // Lower the priority of the bottom constraint. This allows the spacer to shrink/grow
+        // while the contentStackView remains attached to the top.
+        bottomConstraint.priority = .defaultHigh // Higher than defaultLow, but less than required
+
+        NSLayoutConstraint.activate([
+            topConstraint,
+            spacerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            spacerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            bottomConstraint,
+            // Height constraint that allows the spacer to fill remaining space
+            spacerView.heightAnchor.constraint(greaterThanOrEqualToConstant: 0)
+        ])
     }
 }
 

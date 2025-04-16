@@ -422,17 +422,22 @@ extension NavigationView {
         // In case if bottom banner height was set - use it. Otherwise use default height for
         // specific trait collection.
         let bottomBannerContainerViewHeight: CGFloat = if let height {
-            height + safeAreaInsets.bottom
+            max(200.0, height + safeAreaInsets.bottom) // Ensure minimum height of 200
         } else {
             if traitCollection.verticalSizeClass == .regular {
-                80.0 + safeAreaInsets.bottom
+                200.0 + safeAreaInsets.bottom // Fixed minimum height
             } else {
-                60.0 + safeAreaInsets.bottom
+                200.0 + safeAreaInsets.bottom // Same minimum height in landscape
             }
         }
 
         bottomBannerContainerViewLayoutConstraints = [
             bottomBannerContainerView.heightAnchor.constraint(equalToConstant: bottomBannerContainerViewHeight),
+            bottomBannerContainerView.bottomAnchor.constraint(equalTo: self.bottomAnchor),
+            bottomBannerContainerView.leadingAnchor.constraint(equalTo: self.leadingAnchor),
+            bottomBannerContainerView.trailingAnchor.constraint(equalTo: self.trailingAnchor),
+            // Force content to stay at the top
+            bottomBannerContainerView.topAnchor.constraint(greaterThanOrEqualTo: self.topAnchor, constant: bottomBannerContainerViewHeight)
         ]
 
         NSLayoutConstraint.activate(bottomBannerContainerViewLayoutConstraints)

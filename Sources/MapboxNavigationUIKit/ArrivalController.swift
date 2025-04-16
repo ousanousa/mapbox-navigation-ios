@@ -63,6 +63,15 @@ class ArrivalController: NavigationComponentDelegate {
                 completion?(false)
                 return
             }
+
+            // Hide banners before showing the arrival sheet
+            UIView.animate(withDuration: 0.3) {
+                navigationViewData.navigationView.topBannerContainerView.isHidden = true
+                navigationViewData.navigationView.bottomBannerContainerView.isHidden = true
+                // Optional: Hide floating buttons as well if needed
+                // navigationViewData.navigationView.floatingStackView.alpha = 0.0
+            }
+
             let navigationMapView = navigationViewData.navigationView.navigationMapView
             embedEndOfRoute(into: viewController, onDismiss: onDismiss)
             endOfRouteViewController.destination = destination
@@ -108,20 +117,20 @@ class ArrivalController: NavigationComponentDelegate {
 
     // MARK: Private Methods
 
-    private func embedEndOfRoute(
-        into viewController: UIViewController,
+    private func presentEndOfRouteModally(
+        from presentingViewController: UIViewController,
         onDismiss: @escaping EndOfRouteDismissalHandler
     ) {
-        guard let navigationViewData else { return }
-        let endOfRoute = endOfRouteViewController
-        viewController.addChild(endOfRoute)
-        navigationViewData.navigationView.endOfRouteView = endOfRoute.view
-        navigationViewData.navigationView.showEndOfRoute()
-        endOfRoute.didMove(toParent: viewController)
+        let endOfRouteVC = endOfRouteViewController
+        endOfRouteVC.destination = destination // Ensure destination is set before presentation
 
-        endOfRoute.dismissHandler = { [weak self] stars, comment in
-            let feedbackRating = self?.rating(for: stars)
-            if let feedbackRating, let eventsManager = self?.eventsManager {
+        // Configure the dismiss handler for when the EndOfRouteVC signals dismissal (e.g., button press)
+        endOfRouteVC.dismissHandler = { [weak self, weak endOfRouteVC] stars, comment in
+            guard let self, let endOfRouteVC else { return }
+
+            // Handle feedback submission
+            let feedbackRating = self.rating(for: stars)
+            if let feedbackRating, let eventsManager = self.eventsManager {
                 Task { @MainActor in
                     guard let feedbackEvent = await eventsManager.createFeedback() else { return }
                     let eventType = ActiveNavigationFeedbackType.arrival(rating: feedbackRating)
@@ -132,8 +141,66 @@ class ArrivalController: NavigationComponentDelegate {
                     )
                 }
             }
-            onDismiss()
+
+            // Dismiss the modal view controller
+            endOfRouteVC.dismiss(animated: true) {
+                // Show banners again before calling the original dismiss handler
+                if let navigationView = self.navigationViewData?.navigationView {
+                    UIView.animate(withDuration: 0.3) {
+                        navigationView.topBannerContainerView.isHidden = false
+                        navigationView.bottomBannerContainerView.isHidden = false
+                        // Optional: Restore floating buttons alpha
+                        // navigationView.floatingStackView.alpha = 1.0
+                    }
+                }
+                onDismiss() // Call the original onDismiss handler after modal dismiss animation
+            }
         }
+
+        // Configure the sheet presentation controller
+        if #available(iOS 15.0, *) {
+            if let sheet = endOfRouteVC.sheetPresentationController {
+                if #available(iOS 16.0, *) {
+                    // Configuration pour iOS 16+
+                    let smallDetent = UISheetPresentationController.Detent.custom { context in
+                        return 200 // Hauteur minimale fixe
+                    }
+                    let mediumDetent = UISheetPresentationController.Detent.medium()
+                    let largeDetent = UISheetPresentationController.Detent.large()
+                    
+                    sheet.detents = [smallDetent, mediumDetent, largeDetent]
+                    sheet.selectedDetentIdentifier = smallDetent.identifier // Commence en mode petit
+                    sheet.largestUndimmedDetentIdentifier = smallDetent.identifier // Empêche la disparition
+                    sheet.prefersGrabberVisible = true
+                    sheet.preferredCornerRadius = 8.0
+                    sheet.prefersScrollingExpandsWhenScrolledToEdge = false // Empêche l'expansion automatique
+                    endOfRouteVC.isModalInPresentation = true // Empêche la fermeture par glissement
+                } else {
+                    // Configuration pour iOS 15
+                    sheet.detents = [.medium(), .large()]
+                    sheet.largestUndimmedDetentIdentifier = .medium
+                    endOfRouteVC.isModalInPresentation = true
+                    sheet.prefersGrabberVisible = true
+                    sheet.preferredCornerRadius = 8.0
+                }
+            }
+        } else {
+            // Fallback on earlier versions
+            // On iOS < 15, sheet presentation is not available.
+            // We might need a custom implementation or simply present it as a standard full-screen modal.
+            // For now, let's stick to the default modal presentation without sheet configuration.
+            // Alternatively, we could revert to the original embedding logic here for older iOS versions.
+        }
+
+        // Present the view controller modally
+        presentingViewController.present(endOfRouteVC, animated: true, completion: nil)
+    }
+
+    private func embedEndOfRoute(
+        into viewController: UIViewController,
+        onDismiss: @escaping EndOfRouteDismissalHandler
+    ) {
+        presentEndOfRouteModally(from: viewController, onDismiss: onDismiss)
     }
 
     fileprivate func rating(for stars: Int) -> Int? {
